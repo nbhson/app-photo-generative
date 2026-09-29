@@ -125,7 +125,7 @@ export function SettingsModal() {
           }} className="flex-1 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-sm font-medium">Save & use provider</button>
           <button onClick={() => useEditor.setState({ showSettings: false })} className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-sm">Close</button>
         </div>
-        <p className="text-[11px] text-white/35 mt-2 leading-snug">Demo note: the key is stored only in this browser. A production app should call AI from a backend (Browser → your API → provider) so keys and billing stay server-side.</p>
+        <p className="text-[11px] text-white/35 mt-2 leading-snug">Saved in this browser's localStorage, so providers survive reloads — delete one anytime with its remove button. Only use keys you can rotate: any script on this page could read them. A production app should call AI from a backend (Browser → your API → provider) so keys and billing stay server-side.</p>
         {customs.length > 0 && (
           <div className="mt-3 text-[12px] space-y-1">
             {customs.map((c) => (

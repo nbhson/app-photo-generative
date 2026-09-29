@@ -39,8 +39,10 @@ Requires Node 18+. No API key needed — the Mock provider generates instantly.
 3. Press **Test connection**, then **Save & use provider** — it becomes active immediately.
 4. Generate. Requests go to `POST {baseUrl}/images/generations`.
 
-> Demo note: the key is stored only in your browser. Production apps should call AI
-> from a backend (`Browser → your API → provider`) so keys and billing stay server-side.
+> Custom providers persist in the browser's `localStorage` (key `gs-ai-providers-v1`),
+> so they survive reloads. Demo note: the key is stored only in your browser — only use
+> keys you can rotate. Production apps should call AI from a backend
+> (`Browser → your API → provider`) so keys and billing stay server-side.
 
 ## Keyboard shortcuts
 
