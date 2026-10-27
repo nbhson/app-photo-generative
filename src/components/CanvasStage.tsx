@@ -44,25 +44,39 @@ export default function CanvasStage() {
   const canvasHeight = useEditor((s) => s.canvasHeight);
   const activeLayerId = useEditor((s) => s.activeLayerId);
 
+  const fitAtRef = useRef<(sw: number, sh: number) => void>(() => {});
+  const didInitialFit = useRef(false);
+  const fitAt = (sw: number, sh: number) => {
+    const pad = 80;
+    const z = Math.min((sw - pad) / canvasWidth, (sh - pad) / canvasHeight);
+    useEditor.setState({
+      zoom: Math.max(0.05, Math.min(4, z)),
+      panX: (sw - canvasWidth * z) / 2,
+      panY: (sh - canvasHeight * z) / 2,
+    });
+  };
+  // Keep the ref pointing at the latest fitAt so the ResizeObserver callback
+  // (which captures this ref, not fitAt) always invokes the current closure.
+  // Safe: the callback runs after React commits, so the ref is always up-to-date.
+  // oxlint-disable-next-line react/refs
+  fitAtRef.current = fitAt;
+  const fit = () => fitAt(size.w, size.h);
+
   useEffect(() => {
     const el = wrapRef.current!;
-    const ro = new ResizeObserver(() => setSize({ w: el.clientWidth, h: el.clientHeight }));
+    const ro = new ResizeObserver(() => {
+      const w = el.clientWidth, h = el.clientHeight;
+      setSize({ w, h });
+      // First fit must wait for the real container size — a mount-only fit
+      // would use the pre-measurement default (800×600) and misalign the view.
+      if (!didInitialFit.current && w > 0) { didInitialFit.current = true; fitAtRef.current(w, h); }
+    });
     ro.observe(el);
-    setSize({ w: el.clientWidth, h: el.clientHeight });
     return () => ro.disconnect();
   }, []);
 
-  const fit = () => {
-    const pad = 80;
-    const z = Math.min((size.w - pad) / canvasWidth, (size.h - pad) / canvasHeight);
-    useEditor.setState({
-      zoom: Math.max(0.05, Math.min(4, z)),
-      panX: (size.w - canvasWidth * z) / 2,
-      panY: (size.h - canvasHeight * z) / 2,
-    });
-  };
+  // Re-fit when user presses "Fit" or changes canvas dimensions.
   useEffect(() => { if (size.w > 0) fit(); }, [fitTick, canvasWidth, canvasHeight]); // eslint-disable-line
-  useEffect(() => { fit(); }, []); // eslint-disable-line
 
   // transformer attach
   useEffect(() => {
