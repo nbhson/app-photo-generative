@@ -1,11 +1,14 @@
-import { useEffect } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import TopBar from './components/TopBar';
 import Toolbar, { TOOL_SHORTCUTS, TOOL_META } from './components/Toolbar';
-import CanvasStage from './components/CanvasStage';
 import RightPanel from './components/RightPanel';
 import { CommandBar, SettingsModal, StatusBar, WelcomeModal } from './components/Overlays';
 import { useEditor } from './state/store';
 import { saveProjectLocal } from './services/persistence';
+
+// Konva/react-konva chỉ dùng ở đây — lazy-load để tách khỏi main chunk
+// (bundle 623 kB → main chunk nhỏ, canvas load sau khi shell render).
+const CanvasStage = lazy(() => import('./components/CanvasStage'));
 
 export default function App() {
   useEffect(() => {
@@ -108,7 +111,9 @@ export default function App() {
       <OptionsStrip />
       <div className="flex-1 flex min-h-0">
         <Toolbar />
-        <CanvasStage />
+        <Suspense fallback={<div className="flex-1 grid place-items-center text-[12px] text-white/40 bg-[#08090d]"><span className="w-5 h-5 rounded-full border-2 border-violet-400/40 border-t-violet-300 animate-spin" /></div>}>
+          <CanvasStage />
+        </Suspense>
         <RightPanel />
       </div>
       <StatusBar />
