@@ -43,24 +43,47 @@ export default function App() {
   }, []);
 
   const onImport = (f: File) => {
+    // SVG: rasterize qua text đã sanitize — browser chạy SVG-in-<img> ở secure
+    // static mode nhưng strip external refs trước đây để defense-in-depth
+    // (<image href="http…">, <use href>, <script>, <foreignObject>).
+    if (f.type === 'image/svg+xml') {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const svg = String(reader.result ?? '');
+        if (!/<svg[\s>]/i.test(svg)) return; // invalid — bỏ im (UI đã lọc type)
+        const sanitized = svg
+          .replace(/<script[\s\S]*?<\/script\s*>/gi, '')
+          .replace(/<foreignObject[\s\S]*?<\/foreignObject\s*>/gi, '')
+          .replace(/\s(href|xlink:href)\s*=\s*["']\s*(https?:|\/\/)[^"']*["']/gi, ' ');
+        const blobUrl = URL.createObjectURL(new Blob([sanitized], { type: 'image/svg+xml' }));
+        const img = new Image();
+        img.onload = () => {
+          try {
+            // SVG has no natural size until rendered — default to canvas size
+            const iw = img.naturalWidth || 1280, ih = img.naturalHeight || 800;
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.min(iw, 1600); canvas.height = Math.min(ih, 1600);
+            const ctx = canvas.getContext('2d')!;
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            useEditor.getState().importImage(canvas.toDataURL('image/png'), f.name, canvas.width, canvas.height);
+          } finally { URL.revokeObjectURL(blobUrl); }
+        };
+        img.onerror = () => URL.revokeObjectURL(blobUrl);
+        img.src = blobUrl;
+      };
+      reader.readAsText(f);
+      return;
+    }
     const url = URL.createObjectURL(f);
     const img = new Image();
     img.onload = () => {
-      // SVG has no natural size until rendered — default to canvas size
       const iw = img.naturalWidth || 1280, ih = img.naturalHeight || 800;
-      if (f.type === 'image/svg+xml') {
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.min(iw, 1600); canvas.height = Math.min(ih, 1600);
-        const ctx = canvas.getContext('2d')!;
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        useEditor.getState().importImage(canvas.toDataURL('image/png'), f.name, canvas.width, canvas.height);
-      } else {
-        const reader = new FileReader();
-        reader.onload = () => useEditor.getState().importImage(reader.result as string, f.name, iw, ih);
-        reader.readAsDataURL(f);
-      }
+      const reader = new FileReader();
+      reader.onload = () => useEditor.getState().importImage(reader.result as string, f.name, iw, ih);
+      reader.readAsDataURL(f);
       URL.revokeObjectURL(url);
     };
+    img.onerror = () => URL.revokeObjectURL(url); // trước đây URL leak khi ảnh lỗi
     img.src = url;
   };
 

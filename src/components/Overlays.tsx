@@ -102,9 +102,8 @@ export function SettingsModal() {
               className="mt-1 w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-2 text-[13px] text-white outline-none focus:border-violet-500" />
           </label>
         ))}
-        <label className="block text-[12px] text-white/60 mb-3">API Type
-          <select className="mt-1 w-full bg-[#1a1f2b] rounded-lg px-2.5 py-2 text-[13px]"><option>OpenAI Compatible</option></select>
-        </label>
+        {/* "API Type" select đã bỏ — chỉ có duy nhất 1 option cứng
+            'OpenAI Compatible' không đọc/ghi state nào (dead control). */}
         {testMsg && (
           <div className={`text-[12px] mb-2 px-2.5 py-1.5 rounded-lg border ${testOk ? 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' : 'text-red-300 border-red-500/30 bg-red-500/10'}`}>
             {testMsg}

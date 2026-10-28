@@ -135,17 +135,29 @@ export default function CanvasStage() {
             setMarquee({ x: Math.min(x0, d.x), y: Math.min(y0, d.y), w: Math.abs(d.x - x0), h: Math.abs(d.y - y0) });
           }
         }}
-        onMouseUp={() => {
+        onMouseUp={(e) => {
           panning.current = null;
-          if (drawing.current && marquee && marquee.w > 8 && marquee.h > 8) {
-            useEditor.getState().setSelection({
-              x: Math.round(marquee.x), y: Math.round(marquee.y),
-              width: Math.round(marquee.w), height: Math.round(marquee.h),
-            });
-          } else if (drawing.current) {
-            // click (no drag) with AI Select = smart-select the subject
-            if (tool === 'ai-select') { void smartSelectSubject(); }
-            else useEditor.getState().setSelection(null);
+          if (drawing.current) {
+            // Tính rect CUỐI từ drawing.current + pointer hiện tại — đọc state
+            // `marquee` trước đây có thể stale (setMarquee chưa flush trước khi
+            // mouseup fire nhanh) → selection lệch/miss drag ngắn.
+            const pos = e.target.getStage()?.getPointerPosition();
+            const d = pos ? toDoc(pos.x, pos.y) : null;
+            const x0 = drawing.current.x, y0 = drawing.current.y;
+            const rect = d && {
+              x: Math.min(x0, d.x), y: Math.min(y0, d.y),
+              w: Math.abs(d.x - x0), h: Math.abs(d.y - y0),
+            };
+            if (rect && rect.w > 8 && rect.h > 8) {
+              useEditor.getState().setSelection({
+                x: Math.round(rect.x), y: Math.round(rect.y),
+                width: Math.round(rect.w), height: Math.round(rect.h),
+              });
+            } else {
+              // click (no drag) with AI Select = smart-select the subject
+              if (tool === 'ai-select') { void smartSelectSubject(); }
+              else useEditor.getState().setSelection(null);
+            }
           }
           drawing.current = null; setMarquee(null);
         }}
