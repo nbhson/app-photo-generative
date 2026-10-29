@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useEditor } from '../state/store';
 import { Modal } from './Overlays';
 import { Icon } from './icons';
@@ -20,18 +20,15 @@ export default function CanvasSizeDialog() {
   const open = useEditor((s) => s.showCanvasSize);
   const canvasWidth = useEditor((s) => s.canvasWidth);
   const canvasHeight = useEditor((s) => s.canvasHeight);
-  const [w, setW] = useState('1280');
-  const [h, setH] = useState('800');
-
-  // sync input mỗi lần mở — không kế thừa draft lần trước
-  useEffect(() => {
-    if (open) {
-      setW(String(Math.round(canvasWidth)));
-      setH(String(Math.round(canvasHeight)));
-    }
-  }, [open, canvasWidth, canvasHeight]);
-
+  // form chỉ mount khi dialog mở — input khởi tạo từ kích thước hiện tại,
+  // không kế thừa draft lần trước và không cần effect sync khi mở
   if (!open) return null;
+  return <CanvasSizeForm canvasWidth={canvasWidth} canvasHeight={canvasHeight} />;
+}
+
+function CanvasSizeForm({ canvasWidth, canvasHeight }: { canvasWidth: number; canvasHeight: number }) {
+  const [w, setW] = useState(() => String(Math.round(canvasWidth)));
+  const [h, setH] = useState(() => String(Math.round(canvasHeight)));
   const nw = clamp(Number(w));
   const nh = clamp(Number(h));
   const changed = nw !== Math.round(canvasWidth) || nh !== Math.round(canvasHeight);

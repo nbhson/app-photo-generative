@@ -1,24 +1,50 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { v4 as uuid } from 'uuid';
 import { useEditor, parseIntent } from '../state/store';
 import { runGeneration } from '../ai/runGeneration';
 import { Icon, type IconName } from './icons';
 
-/** Shared modal shell: backdrop click + Escape to close, dialog semantics. */
+const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+
+/** Shared modal shell: backdrop click + Escape to close, dialog semantics, focus trap. */
 export function Modal({ onClose, width, labelledBy, children, align = 'center' }: {
   onClose: () => void; width: string; labelledBy?: string;
   children: React.ReactNode; align?: 'center' | 'top';
 }) {
+  const boxRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopPropagation(); onClose(); return; }
+      // focus trap: Tab/Shift+Tab vòng trong dialog, không thoát ra nền
+      if (e.key === 'Tab' && boxRef.current) {
+        const box = boxRef.current;
+        const focusables = Array.from(box.querySelectorAll<HTMLElement>(FOCUSABLE));
+        if (focusables.length === 0) return;
+        const first = focusables[0]!;
+        const last = focusables[focusables.length - 1];
+        const active = document.activeElement;
+        if (e.shiftKey && (active === first || !box.contains(active))) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && (active === last || !box.contains(active))) { e.preventDefault(); first.focus(); }
+      }
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+  // focus vào dialog khi mở — ưu tiên [data-autofocus] (vd confirm button);
+  // nếu input trong dialog đã tự focus (autoFocus attr) thì không giật focus
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box) return;
+    const target = box.querySelector<HTMLElement>('[data-autofocus]');
+    if (target) { target.focus(); return; }
+    if (!box.contains(document.activeElement)) box.focus();
+  }, []);
   return (
     <div role="dialog" aria-modal="true" aria-labelledby={labelledBy}
       className={`fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px] ${align === 'top' ? 'grid place-items-start pt-28' : 'grid place-items-center p-4'}`}
       onClick={onClose}>
-      <div className={`${width} bg-[#141823] border border-white/15 rounded-2xl shadow-2xl overflow-hidden`}
+      <div ref={boxRef} tabIndex={-1}
+        className={`${width} bg-[#141823] border border-white/15 rounded-2xl shadow-2xl overflow-hidden outline-none`}
         onClick={(e) => e.stopPropagation()}>
         {children}
       </div>
@@ -37,11 +63,20 @@ const SUGGESTIONS = [
 
 export function CommandBar() {
   const open = useEditor((s) => s.showCommandBar);
+  // render command shell chỉ khi mở — CommandBarInner mount fresh mỗi lần,
+  // state text/err tự reset lúc mount (không cần effect sync — eslint set-state-in-effect)
+  if (!open) return null;
+  return (
+    <Modal width="w-[min(620px,92vw)]" align="top" onClose={() => useEditor.setState({ showCommandBar: false })}>
+      <CommandBarInner />
+    </Modal>
+  );
+}
+
+function CommandBarInner() {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  useEffect(() => { if (open) { setText(''); setErr(''); } }, [open ]);
-  if (!open) return null;
   const go = async (t: string) => {
     const { type, prompt } = parseIntent(t || 'enhance');
     setBusy(true); setErr('');
@@ -52,7 +87,7 @@ export function CommandBar() {
     finally { setBusy(false); }
   };
   return (
-    <Modal width="w-[min(620px,92vw)]" align="top" onClose={() => useEditor.setState({ showCommandBar: false })}>
+    <>
         <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10">
           <Icon name="sparkles" size={16} className="text-violet-300 shrink-0" />
           <input autoFocus value={text} onChange={(e) => setText(e.target.value)}
@@ -73,7 +108,7 @@ export function CommandBar() {
         </div>
         {busy && <div className="flex items-center gap-2 px-4 py-2 text-[13px] text-violet-300"><span className="w-2 h-2 rounded-full bg-violet-400 gen-pulse" /> Working — watch the AI panel for progress…</div>}
         {err && <div className="px-4 py-2 text-[13px] text-red-400">{err}</div>}
-    </Modal>
+    </>
   );
 }
 
