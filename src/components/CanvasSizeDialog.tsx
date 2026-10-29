@@ -22,14 +22,12 @@ export default function CanvasSizeDialog() {
   const canvasHeight = useEditor((s) => s.canvasHeight);
   const [w, setW] = useState('1280');
   const [h, setH] = useState('800');
-  const [err, setErr] = useState('');
 
   // sync input mỗi lần mở — không kế thừa draft lần trước
   useEffect(() => {
     if (open) {
       setW(String(Math.round(canvasWidth)));
       setH(String(Math.round(canvasHeight)));
-      setErr('');
     }
   }, [open, canvasWidth, canvasHeight]);
 
@@ -86,8 +84,6 @@ export default function CanvasSizeDialog() {
           Layers keep their position — content outside the new bounds stays in the document.
           {changed && <> New size: <b className="text-white/70 tabular-nums">{nw} × {nh} px</b>.</>}
         </p>
-
-        {err && <div role="alert" className="text-[12px] mb-2 px-2.5 py-1.5 rounded-lg border border-red-500/30 bg-red-500/10 text-red-300">{err}</div>}
 
         <div className="flex gap-2">
           <button onClick={apply} disabled={!changed}
