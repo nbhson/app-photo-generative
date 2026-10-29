@@ -32,15 +32,21 @@ export default function App() {
       }
       if ((mod && e.key.toLowerCase() === 'y') || (mod && e.shiftKey && e.key.toLowerCase() === 'z')) { e.preventDefault(); useEditor.getState().redo(); return; }
       if (mod && e.key.toLowerCase() === 'e') { e.preventDefault(); useEditor.setState({ showExport: true }); return; }
+      const s = useEditor.getState();
+      // Modal/confirm đang mở → chặn phím tắt toàn cục trừ Escape (Modal shell tự đóng)
+      // và Ctrl+K (toggle command bar). Trước đây Delete/tool-shortcut vẫn chạy khi
+      // focus nằm trên container của dialog (không phải INPUT) → thao tác ẩn dưới modal.
+      const modalOpen = s.showCommandBar || s.showSettings || s.showExport || s.showShortcuts
+        || s.showWelcome || s.showCanvasSize || s.showNewProjectConfirm;
       if (e.key === 'Escape') {
         // Modal đang mở → Modal shell tự đóng bằng Escape; không thêm clear selection
-        const s = useEditor.getState();
-        if (s.showCommandBar || s.showSettings || s.showExport || s.showShortcuts || s.showWelcome || s.showCanvasSize) return;
+        if (modalOpen) return;
         useEditor.getState().setSelection(null);
         return;
       }
-      if (e.key === '?' || (e.shiftKey && e.key === '/')) { useEditor.setState({ showShortcuts: true }); return; }
+      if (e.key === '?' || (e.shiftKey && e.key === '/')) { if (!modalOpen) useEditor.setState({ showShortcuts: true }); return; }
       if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (modalOpen) return;
         const t = e.target as HTMLElement;
         if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') return;
         const id = useEditor.getState().activeLayerId;
@@ -48,7 +54,7 @@ export default function App() {
         return;
       }
       const t = e.target as HTMLElement;
-      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || mod) return;
+      if (modalOpen || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || mod) return;
       const tool = TOOL_SHORTCUTS[e.key.toLowerCase()];
       if (tool) useEditor.setState({ tool });
       if (e.key === '[') useEditor.setState({ rightTab: 'layers' });

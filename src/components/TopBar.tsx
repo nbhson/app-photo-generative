@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useEditor } from '../state/store';
 import { runAIAction } from '../ai/runGeneration';
 import { Icon } from './icons';
+import { ConfirmDialog } from './ConfirmDialog';
 import { buildProjectFile, compositeLayers, downloadDataUrl, saveProjectLocal } from '../services/persistence';
 import type { AIOperationType } from '../types';
 
@@ -27,6 +28,7 @@ export default function TopBar({ onImport }: { onImport: (f: File) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState<string | null>(null);
   const navRef = useRef<HTMLElement>(null);
+  const confirmNew = useEditor((s) => s.showNewProjectConfirm);
 
   useEffect(() => {
     const close = (e: MouseEvent) => {
@@ -70,8 +72,8 @@ export default function TopBar({ onImport }: { onImport: (f: File) => void }) {
   };
   const newProject = () => {
     const st = useEditor.getState();
-    // đang có work chưa save → xác nhận trước khi mất
-    if (st.dirty && st.layers.length > 0 && !window.confirm('Start a new project? Unsaved changes will be lost.')) return;
+    // đang có work chưa save → confirm dialog in-app (thay window.confirm)
+    if (st.dirty && st.layers.length > 0) { useEditor.setState({ showNewProjectConfirm: true }); return; }
     st.newProject();
   };
   const aiAction = (t: AIOperationType) => {
@@ -88,7 +90,11 @@ export default function TopBar({ onImport }: { onImport: (f: File) => void }) {
   const menus: Record<string, MenuItem[]> = {
     File: [
       { label: 'New Project', action: newProject },
-      { label: 'Import Image…', action: () => fileRef.current?.click() },
+      // dispatch event thay vì đọc fileRef trong closure — menus được pass qua
+      // Object.entries() trong render, và oxlint react(refs) flag mọi closure
+      // đọc ref trong object được pass vào function (false positive, nhưng
+      // dispatch qua event listener có sẵn cũng sạch hơn)
+      { label: 'Import Image…', action: () => window.dispatchEvent(new Event('gs:import')) },
       { label: 'Canvas Size…', action: () => useEditor.setState({ showCanvasSize: true }) },
       { divider: true },
       { label: 'Save to Browser', shortcut: 'Ctrl+S', action: () => void doSave() },
@@ -194,6 +200,15 @@ export default function TopBar({ onImport }: { onImport: (f: File) => void }) {
       </div>
       <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) onImport(f); e.target.value = ''; }} />
+      <ConfirmDialog
+        open={confirmNew}
+        title="Start a new project?"
+        message="Your current canvas and layers have unsaved changes. Starting a new project will discard them."
+        confirmLabel="Discard changes"
+        cancelLabel="Keep editing"
+        onConfirm={() => { useEditor.setState({ showNewProjectConfirm: false }); useEditor.getState().newProject(); }}
+        onCancel={() => useEditor.setState({ showNewProjectConfirm: false })}
+      />
     </header>
   );
 }

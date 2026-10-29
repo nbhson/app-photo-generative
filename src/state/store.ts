@@ -29,6 +29,8 @@ interface EditorState {
   showShortcuts: boolean;
   showExport: boolean;
   showCanvasSize: boolean;
+  /** Confirm dialog cho New Project khi có work chưa save (thay window.confirm). */
+  showNewProjectConfirm: boolean;
   /** Transient toast message (not persisted) — auto-dismisses. */
   toast?: string;
   promptText: string;
@@ -81,6 +83,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   dirty: false, saveStatus: 'saved',
   rightTab: 'layers',
   showCommandBar: false, showSettings: false, showWelcome: false, showShortcuts: false, showExport: false, showCanvasSize: false,
+  showNewProjectConfirm: false,
   promptText: '',
   jobs: {},
   operations: [], results: [], compareMode: false,
