@@ -1,25 +1,56 @@
 import { useEffect, useRef, useState } from 'react';
+import Konva from 'konva';
 import { Stage, Layer as KLayer, Image as KImage, Rect, Transformer } from 'react-konva';
 import useImage from 'use-image';
-import type Konva from 'konva';
-import { useEditor } from '../state/store';
 import type { Layer } from '../types';
+import { useEditor } from '../state/store';
 
 const SELECTION_TOOLS = new Set(['marquee', 'generative-fill', 'remove-object', 'replace-object', 'ai-select']);
 
-function LayerNode({ layer, draggable }: { layer: Layer; isActive: boolean; draggable: boolean }) {
+function LayerNode({ layer, draggable }: { layer: Layer; draggable: boolean }) {
   const [img] = useImage(layer.imageSrc ?? '', 'anonymous');
+  const imgRef = useRef<Konva.Image>(null);
+  // Live, non-destructive preview của 4 adjustment có filter Konva tương ứng
+  // (brightness/contrast/saturation/blur). Các slider còn lại chỉ áp dụng lúc
+  // export/composite (canvas 2D filter).
+  const adj = layer.adjustments;
+  const adjActive = !!adj && !!(adj.brightness || adj.contrast || adj.saturation || adj.blur);
+  useEffect(() => {
+    const node = imgRef.current;
+    if (!node || !img) return;
+    // Filters yêu cầu cache — cache lại mỗi khi ảnh hoặc giá trị adjustment đổi
+    if (adjActive) { node.cache(); node.getLayer()?.batchDraw(); }
+    else { node.clearCache(); }
+  }, [img, adjActive, adj?.brightness, adj?.contrast, adj?.saturation, adj?.blur]);
   if (!layer.visible || !img) return null;
   return (
     <KImage
+      ref={imgRef}
       image={img} name={layer.id}
       x={layer.x} y={layer.y} width={layer.width} height={layer.height}
       opacity={layer.opacity}
       globalCompositeOperation={layer.blendMode === 'normal' ? 'source-over' : (layer.blendMode as never)}
       draggable={draggable && !layer.locked}
+      filters={adjActive ? [Konva.Filters.Brighten, Konva.Filters.Contrast, Konva.Filters.HSL, Konva.Filters.Blur] : undefined}
+      brightness={(adj?.brightness ?? 0) / 100}
+      contrast={adj?.contrast ?? 0}
+      saturation={(adj?.saturation ?? 0) / 100}
+      blurRadius={adj?.blur ?? 0}
       onDragEnd={(e) => useEditor.getState().updateLayer(layer.id, { x: Math.round(e.target.x()), y: Math.round(e.target.y()) })}
+      onTransformEnd={(e) => {
+        // Persist resize — trước đây Transformer chỉ scale node trực quan,
+        // không có onTransformEnd nên state không đổi → snap back khi re-render.
+        const n = e.target;
+        const sx = n.scaleX(), sy = n.scaleY();
+        n.scaleX(1); n.scaleY(1);
+        useEditor.getState().updateLayer(layer.id, {
+          x: Math.round(n.x()), y: Math.round(n.y()),
+          width: Math.max(1, Math.round(layer.width * sx)),
+          height: Math.max(1, Math.round(layer.height * sy)),
+        });
+        useEditor.getState().pushHistory('Transform layer');
+      }}
       onClick={() => useEditor.setState({ activeLayerId: layer.id })}
-      filters={[]}
     />
   );
 }
@@ -78,29 +109,38 @@ export default function CanvasStage() {
   // Re-fit when user presses "Fit" or changes canvas dimensions.
   useEffect(() => { if (size.w > 0) fit(); }, [fitTick, canvasWidth, canvasHeight]); // eslint-disable-line
 
-  // transformer attach
+  // transformer attach — deps: layer list/tool/active đổi mới re-attach
+  // (trước đây không deps → chạy + batchDraw mỗi render kể cả wheel/pan)
   useEffect(() => {
     const tr = trRef.current; const stage = stageRef.current;
     if (!tr || !stage) return;
-    // find by name
     const found = activeLayerId ? stage.findOne((n: Konva.Node) => n.name() === activeLayerId) : null;
     if (found && tool === 'move') tr.nodes([found as never]);
     else tr.nodes([]);
     tr.getLayer()?.batchDraw();
-  });
+  }, [activeLayerId, tool, layers]);
+
+  // Stage cleanup on unmount — giải phóng DOM/canvas listeners của Konva
+  useEffect(() => () => { stageRef.current?.destroy(); }, []);
 
   const toDoc = (px: number, py: number) => ({ x: (px - panX) / zoom, y: (py - panY) / zoom });
 
   const onWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault();
-    const st = stageRef.current!;
-    const old = useEditor.getState().zoom;
-    const dir = e.evt.deltaY > 0 ? -1 : 1;
-    const nz = Math.max(0.05, Math.min(8, old * (dir > 0 ? 1.1 : 0.9)));
-    const mouse = st.getPointerPosition()!;
-    const nx = mouse.x - ((mouse.x - panX) / old) * nz;
-    const ny = mouse.y - ((mouse.y - panY) / old) * nz;
-    useEditor.setState({ zoom: nz, panX: nx, panY: ny });
+    const st = useEditor.getState();
+    if (e.evt.ctrlKey || e.evt.metaKey) {
+      // Ctrl/⌘+wheel = zoom quanh con trỏ (khớp hint "Ctrl+scroll to zoom")
+      const old = st.zoom;
+      const dir = e.evt.deltaY > 0 ? -1 : 1;
+      const nz = Math.max(0.05, Math.min(8, old * (dir > 0 ? 1.1 : 0.9)));
+      const mouse = stageRef.current!.getPointerPosition()!;
+      const nx = mouse.x - ((mouse.x - panX) / old) * nz;
+      const ny = mouse.y - ((mouse.y - panY) / old) * nz;
+      useEditor.setState({ zoom: nz, panX: nx, panY: ny });
+    } else {
+      // plain wheel = pan (deltaX/deltaY pixel) — trước đây wheel mọi lúc là zoom
+      useEditor.setState({ panX: panX - e.evt.deltaX, panY: panY - e.evt.deltaY });
+    }
   };
 
   const isSelectionTool = SELECTION_TOOLS.has(tool);
@@ -165,7 +205,7 @@ export default function CanvasStage() {
         <KLayer>
           {/* completely empty canvas — no document paper at all; layers define the visuals */}
           {layers.map((l) => (
-            <LayerNode key={l.id} layer={l} isActive={l.id === activeLayerId} draggable={tool === 'move'} />
+            <LayerNode key={l.id} layer={l} draggable={tool === 'move'} />
           ))}
           {/* committed selection */}
           {selection && (
