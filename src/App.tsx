@@ -4,7 +4,8 @@ import Toolbar, { TOOL_SHORTCUTS, TOOL_META } from './components/Toolbar';
 import RightPanel from './components/RightPanel';
 import { CommandBar, SettingsModal, StatusBar, WelcomeModal } from './components/Overlays';
 import { useEditor } from './state/store';
-import { saveProjectLocal, buildProjectFile } from './services/persistence';
+import { saveProjectLocal, buildProjectFile, loadProjectLocal, sanitizeProject } from './services/persistence';
+import { importImageFile } from './services/imageImport';
 
 // Konva/react-konva chỉ dùng ở đây — lazy-load để tách khỏi main chunk
 // (bundle 623 kB → main chunk nhỏ, canvas load sau khi shell render).
@@ -46,49 +47,37 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // Session restore: khôi phục autosave từ IndexedDB lúc khởi động (trước đây
+  // loadProjectLocal là dead code). Restore im lặng nếu có layers; "New Project"
+  // vẫn xóa sạch. Lịch sử cũ không restore (historyIndex không còn khớp) —
+  // snapshot khôi phục được push thành entry đầu tiên.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const saved = await loadProjectLocal('autosave');
+        if (cancelled) return;
+        const p = sanitizeProject(saved);
+        if (!p || !p.layers.length) return;
+        const st = useEditor.getState();
+        if (st.layers.length) return; // user đã thao tác trước khi restore xong
+        useEditor.setState({
+          docId: p.document.id, projectName: p.document.name,
+          canvasWidth: p.document.width, canvasHeight: p.document.height,
+          layers: p.layers, operations: p.operations,
+          activeLayerId: p.layers[p.layers.length - 1]?.id,
+          saveStatus: 'saved', dirty: false,
+        });
+        useEditor.getState().pushHistory('Restore session');
+      } catch { /* corrupt autosave → start fresh */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const onImport = (f: File) => {
-    // SVG: rasterize qua text đã sanitize — browser chạy SVG-in-<img> ở secure
-    // static mode nhưng strip external refs trước đây để defense-in-depth
-    // (<image href="http…">, <use href>, <script>, <foreignObject>).
-    if (f.type === 'image/svg+xml') {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const svg = String(reader.result ?? '');
-        if (!/<svg[\s>]/i.test(svg)) return; // invalid — bỏ im (UI đã lọc type)
-        const sanitized = svg
-          .replace(/<script[\s\S]*?<\/script\s*>/gi, '')
-          .replace(/<foreignObject[\s\S]*?<\/foreignObject\s*>/gi, '')
-          .replace(/\s(href|xlink:href)\s*=\s*["']\s*(https?:|\/\/)[^"']*["']/gi, ' ');
-        const blobUrl = URL.createObjectURL(new Blob([sanitized], { type: 'image/svg+xml' }));
-        const img = new Image();
-        img.onload = () => {
-          try {
-            // SVG has no natural size until rendered — default to canvas size
-            const iw = img.naturalWidth || 1280, ih = img.naturalHeight || 800;
-            const canvas = document.createElement('canvas');
-            canvas.width = Math.min(iw, 1600); canvas.height = Math.min(ih, 1600);
-            const ctx = canvas.getContext('2d')!;
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            useEditor.getState().importImage(canvas.toDataURL('image/png'), f.name, canvas.width, canvas.height);
-          } finally { URL.revokeObjectURL(blobUrl); }
-        };
-        img.onerror = () => URL.revokeObjectURL(blobUrl);
-        img.src = blobUrl;
-      };
-      reader.readAsText(f);
-      return;
-    }
-    const url = URL.createObjectURL(f);
-    const img = new Image();
-    img.onload = () => {
-      const iw = img.naturalWidth || 1280, ih = img.naturalHeight || 800;
-      const reader = new FileReader();
-      reader.onload = () => useEditor.getState().importImage(reader.result as string, f.name, iw, ih);
-      reader.readAsDataURL(f);
-      URL.revokeObjectURL(url);
-    };
-    img.onerror = () => URL.revokeObjectURL(url); // trước đây URL leak khi ảnh lỗi
-    img.src = url;
+    void importImageFile(f).catch((e) => {
+      useEditor.setState({ toast: e instanceof Error ? e.message : 'Import failed' });
+    });
   };
 
   // drag & drop import

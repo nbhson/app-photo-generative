@@ -27,6 +27,9 @@ interface EditorState {
   showSettings: boolean;
   showWelcome: boolean;
   showShortcuts: boolean;
+  showExport: boolean;
+  /** Transient toast message (not persisted) — auto-dismisses. */
+  toast?: string;
   promptText: string;
   jobs: Record<string, { progress: number; status: string; label: string; error?: string }>;
   activeOperationId?: string;
@@ -76,7 +79,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   zoom: 0.6, panX: 0, panY: 0, fitTick: 0,
   dirty: false, saveStatus: 'saved',
   rightTab: 'layers',
-  showCommandBar: false, showSettings: false, showWelcome: false, showShortcuts: false,
+  showCommandBar: false, showSettings: false, showWelcome: false, showShortcuts: false, showExport: false,
   promptText: '',
   jobs: {},
   operations: [], results: [], compareMode: false,
