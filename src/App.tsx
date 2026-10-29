@@ -4,7 +4,7 @@ import Toolbar, { TOOL_SHORTCUTS, TOOL_META } from './components/Toolbar';
 import RightPanel from './components/RightPanel';
 import { CommandBar, SettingsModal, StatusBar, WelcomeModal } from './components/Overlays';
 import { useEditor } from './state/store';
-import { saveProjectLocal } from './services/persistence';
+import { saveProjectLocal, buildProjectFile } from './services/persistence';
 
 // Konva/react-konva chỉ dùng ở đây — lazy-load để tách khỏi main chunk
 // (bundle 623 kB → main chunk nhỏ, canvas load sau khi shell render).
@@ -20,14 +20,15 @@ export default function App() {
         e.preventDefault();
         const st = useEditor.getState();
         useEditor.setState({ saveStatus: 'saving' });
-        void saveProjectLocal('autosave', {
-          version: '1.0',
-          document: { id: st.docId, name: st.projectName, width: st.canvasWidth, height: st.canvasHeight },
-          layers: st.layers, operations: st.operations, history: st.history,
-        }).then(() => useEditor.setState({ saveStatus: 'saved', dirty: false }));
+        void saveProjectLocal('autosave', buildProjectFile(st))
+          .then(() => useEditor.setState({ saveStatus: 'saved', dirty: false }))
+          // IndexedDB fail (private mode / quota) — không kẹt 'saving' mãi
+          .catch(() => useEditor.setState({ saveStatus: 'unsaved' }));
         return;
       }
       if ((mod && e.key.toLowerCase() === 'y') || (mod && e.shiftKey && e.key.toLowerCase() === 'z')) { e.preventDefault(); useEditor.getState().redo(); return; }
+      if (e.key === 'Escape') { useEditor.getState().setSelection(null); return; }
+      if (e.key === '?' || (e.shiftKey && e.key === '/')) { useEditor.setState({ showShortcuts: true }); return; }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         const t = e.target as HTMLElement;
         if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') return;

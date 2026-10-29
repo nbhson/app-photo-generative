@@ -18,6 +18,33 @@ export async function loadProjectLocal(key: string): Promise<ProjectFile | undef
   return d.get(STORE, key);
 }
 
+/** Serialize editor state -> ProjectFile (single source of truth cho Ctrl+S / Save / Save-file). */
+export function buildProjectFile(st: {
+  docId: string; projectName: string; canvasWidth: number; canvasHeight: number;
+  layers: ProjectFile['layers']; operations: ProjectFile['operations']; history: ProjectFile['history'];
+}): ProjectFile {
+  return {
+    version: '1.0',
+    document: { id: st.docId, name: st.projectName, width: st.canvasWidth, height: st.canvasHeight },
+    layers: st.layers, operations: st.operations, history: st.history,
+  };
+}
+
+/** Validate + sanitize a loaded ProjectFile (corrupt IndexedDB / foreign file). */
+export function sanitizeProject(raw: unknown): ProjectFile | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const p = raw as Partial<ProjectFile>;
+  const d = p.document;
+  if (!d || typeof d.id !== 'string' || !Array.isArray(p.layers)) return null;
+  return {
+    version: typeof p.version === 'string' ? p.version : '1.0',
+    document: { id: d.id, name: typeof d.name === 'string' ? d.name : 'Untitled Project', width: d.width ?? 1280, height: d.height ?? 800 },
+    layers: p.layers.filter((l) => l && typeof l.id === 'string' && typeof l.imageSrc === 'string'),
+    operations: Array.isArray(p.operations) ? p.operations : [],
+    history: Array.isArray(p.history) ? p.history : [],
+  };
+}
+
 /** Composite layers to a single canvas at document resolution for export. */
 const EXPORT_MAX_DIM = 8192; // browser canvas limit an toàn (Safari ~16k, nhưng 8k đủ dùng)
 const VALID_BLEND_MODES = new Set<GlobalCompositeOperation>([

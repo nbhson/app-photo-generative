@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useEditor } from '../state/store';
 import { runAIAction } from '../ai/runGeneration';
 import { Icon } from './icons';
-import { compositeLayers, downloadDataUrl, saveProjectLocal } from '../services/persistence';
+import { buildProjectFile, compositeLayers, downloadDataUrl, saveProjectLocal } from '../services/persistence';
 import type { AIOperationType } from '../types';
 
 interface MenuItem { label?: string; shortcut?: string; disabled?: boolean; divider?: boolean; action?: () => void }
@@ -18,7 +18,12 @@ const AI_MENU_ACTIONS: { type: AIOperationType; label: string }[] = [
 ];
 
 export default function TopBar({ onImport }: { onImport: (f: File) => void }) {
-  const s = useEditor();
+  // selector hẹp — full-store subscribe trước đây re-render cả menu mỗi tick zoom/pan
+  const projectName = useEditor((s) => s.projectName);
+  const saveStatus = useEditor((s) => s.saveStatus);
+  const canUndo = useEditor((s) => s.historyIndex > 0);
+  const canRedo = useEditor((s) => s.historyIndex < s.history.length - 1);
+  const hasLayers = useEditor((s) => s.layers.length > 0);
   const fileRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState<string | null>(null);
   const navRef = useRef<HTMLElement>(null);
@@ -44,27 +49,23 @@ export default function TopBar({ onImport }: { onImport: (f: File) => void }) {
   const doSave = async () => {
     const st = useEditor.getState();
     useEditor.setState({ saveStatus: 'saving' });
-    await saveProjectLocal('autosave', {
-      version: '1.0',
-      document: { id: st.docId, name: st.projectName, width: st.canvasWidth, height: st.canvasHeight },
-      layers: st.layers, operations: st.operations, history: st.history,
-    });
-    useEditor.setState({ saveStatus: 'saved', dirty: false });
+    try {
+      await saveProjectLocal('autosave', buildProjectFile(st));
+      useEditor.setState({ saveStatus: 'saved', dirty: false });
+    } catch {
+      useEditor.setState({ saveStatus: 'unsaved' });
+    }
   };
   const saveFile = () => {
     const st = useEditor.getState();
-    const blob = new Blob([JSON.stringify({
-      version: '1.0',
-      document: { id: st.docId, name: st.projectName, width: st.canvasWidth, height: st.canvasHeight },
-      layers: st.layers, operations: st.operations, history: st.history,
-    }, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(buildProjectFile(st), null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = `${st.projectName}.gstudio`; a.click();
+    a.href = URL.createObjectURL(blob); a.download = `${st.projectName || 'Untitled Project'}.gstudio`; a.click();
     URL.revokeObjectURL(a.href);
   };
   const aiAction = (t: AIOperationType) => {
     // empty canvas → offer import first instead of failing silently
-    if (!useEditor.getState().layers.length) { fileRef.current?.click(); return; }
+    if (!hasLayers) { fileRef.current?.click(); return; }
     useEditor.setState({ rightTab: 'ai' });
     void runAIAction(t).catch(() => { /* error surfaces in the AI Tasks queue */ });
   };
@@ -78,14 +79,16 @@ export default function TopBar({ onImport }: { onImport: (f: File) => void }) {
       { label: 'New Project', action: () => useEditor.getState().newProject() },
       { label: 'Import Image…', action: () => fileRef.current?.click() },
       { divider: true },
-      { label: 'Save Project (.gstudio)', shortcut: 'Ctrl+S', action: saveFile },
+      { label: 'Save to Browser', shortcut: 'Ctrl+S', action: () => void doSave() },
+      { label: 'Download Project (.gstudio)', action: saveFile },
+      { divider: true },
       { label: 'Export PNG', action: () => void doExport('png') },
       { label: 'Export JPEG', action: () => void doExport('jpeg') },
       { label: 'Export WebP', action: () => void doExport('webp') },
     ],
     Edit: [
-      { label: 'Undo', shortcut: 'Ctrl+Z', disabled: !s.canUndo(), action: () => useEditor.getState().undo() },
-      { label: 'Redo', shortcut: 'Ctrl+Shift+Z', disabled: !s.canRedo(), action: () => useEditor.getState().redo() },
+      { label: 'Undo', shortcut: 'Ctrl+Z', disabled: !canUndo, action: () => useEditor.getState().undo() },
+      { label: 'Redo', shortcut: 'Ctrl+Shift+Z', disabled: !canRedo, action: () => useEditor.getState().redo() },
     ],
     AI: [
       { label: 'Command Bar…', shortcut: '⌘K', action: () => useEditor.setState({ showCommandBar: true }) },
@@ -99,6 +102,11 @@ export default function TopBar({ onImport }: { onImport: (f: File) => void }) {
       { label: 'Zoom In', shortcut: '+', action: () => zoomBy(1.2) },
       { label: 'Zoom Out', shortcut: '−', action: () => zoomBy(1 / 1.2) },
     ],
+    Help: [
+      { label: 'Getting Started', action: () => useEditor.setState({ showWelcome: true }) },
+      { label: 'Keyboard Shortcuts', shortcut: '?', action: () => useEditor.setState({ showShortcuts: true }) },
+      { label: 'AI Provider Settings…', action: () => useEditor.setState({ showSettings: true }) },
+    ],
   };
 
   return (
@@ -110,12 +118,13 @@ export default function TopBar({ onImport }: { onImport: (f: File) => void }) {
         <span className="hidden sm:inline">Generative Studio</span>
         <span className="text-white/30 font-normal hidden sm:inline">/</span>
         <input
-          value={s.projectName}
+          value={projectName}
           onChange={(e) => useEditor.setState({ projectName: e.target.value, saveStatus: 'unsaved' })}
+          aria-label="Project name"
           className="bg-transparent outline-none border border-transparent hover:border-white/15 focus:border-violet-500 rounded px-1 w-36 text-white/90"
         />
-        <span className="text-[11px] font-normal text-white/40 whitespace-nowrap">
-          {s.saveStatus === 'saved' ? '● Saved' : s.saveStatus === 'saving' ? '○ Saving…' : '● Unsaved'}
+        <span className="text-[11px] font-normal text-white/40 whitespace-nowrap" role="status" aria-live="polite">
+          {saveStatus === 'saved' ? '● Saved' : saveStatus === 'saving' ? '○ Saving…' : '● Unsaved'}
         </span>
       </div>
       <nav ref={navRef} className="hidden md:flex items-center gap-0.5 text-white/70 ml-1">
@@ -148,10 +157,10 @@ export default function TopBar({ onImport }: { onImport: (f: File) => void }) {
       </nav>
       <div className="flex-1" />
       <div className="flex items-center gap-1">
-        <ToolBtn title="Undo (Ctrl+Z)" onClick={() => useEditor.getState().undo()} disabled={!s.canUndo()}>
+        <ToolBtn title="Undo (Ctrl+Z)" onClick={() => useEditor.getState().undo()} disabled={!canUndo}>
           <Icon name="undo" size={15} />
         </ToolBtn>
-        <ToolBtn title="Redo (Ctrl+Shift+Z)" onClick={() => useEditor.getState().redo()} disabled={!s.canRedo()}>
+        <ToolBtn title="Redo (Ctrl+Shift+Z)" onClick={() => useEditor.getState().redo()} disabled={!canRedo}>
           <Icon name="redo" size={15} />
         </ToolBtn>
         <ToolBtn title="Save to browser (Ctrl+S)" onClick={() => void doSave()}>
