@@ -142,3 +142,56 @@
 - `VALID_BLEND_MODES` Set chứa 11 giá trị đúng theo `BlendMode` type — 'normal' được xử lý riêng (→ 'source-over').
 - SVG sanitize: regex để capture multiline tags (`[\s\S]*?`) đúng cách; `sanitized` không dùng `fetch`/`eval`/`innerHTML` — an toàn.
 - `URL.revokeObjectURL` trong SVG branch dùng `try/finally` để đảm bảo revoke kể cả khi importImage throw.
+
+---
+
+# Round 3 (2026-10-29): follow-ups từ Round 2
+
+> Scope: confirm dialog in-app, undo/redo affordance, oxlint warnings, dialog tests.
+
+## Ghi nhận scope Round 2
+
+| # | Yêu cầu | Trạng thái |
+|---|---------|-----------|
+| 1 | Thay `window.confirm` (New Project dirty) bằng confirm dialog in-app | **Done** — `ConfirmDialog.tsx` dùng chung `Modal` shell, danger-styled, focus trap, Escape |
+| 2 | Undo/redo UI affordance | **Đã có sẵn** — TopBar có 2 nút undo/redo (disabled theo `historyIndex`, lines ~174–179) + menu Edit + History tab trong RightPanel. Không cần thêm. |
+| 3 | 2 oxlint false positives + fast-refresh warning | **Fix sạch cả 5 warnings** (xem bảng dưới) |
+| 4 | (optional) jsdom tests cho dialog | **Done** — 11 tests mới, tổng 57 |
+
+## Kết quả Round 3
+
+| # | Vị trí | Vấn đề | Fix |
+|---|--------|--------|-----|
+| T1 | TopBar.tsx:144 | oxlint react(refs) false positive — span chỉ vào `menus` trong `Object.entries(menus)`: closure `() => fileRef.current?.click()` nằm trong object được pass vào function lúc render (Object.entries không bao giờ gọi nó) | Menu "Import Image…" dispatch event `gs:import` (effect có sẵn đang listen → click fileRef). Closure không còn đọc ref → warning mất, không cần suppress comment |
+| T2 | Overlays.tsx:43 (CommandBar) | oxlint set-state-in-effect — effect reset text/err khi mở | Tách `CommandBarInner` chỉ mount khi mở → state khởi tạo fresh lúc mount, bỏ hẳn effect |
+| T3 | CanvasSizeDialog.tsx:29 | oxlint set-state-in-effect — effect sync input khi mở | Cùng pattern: `CanvasSizeForm` mount fresh, `useState(() => String(Math.round(canvasWidth)))` |
+| T4 | Toolbar.tsx:31,99 | oxlint only-export-components ×2 — export `TOOL_META`/`TOOL_SHORTCUTS` từ file component | Tách sang `src/components/toolMeta.ts` (chỉ constants, không JSX); Toolbar/App import từ đó |
+| T5 | Overlays Modal shell | Không có focus trap — Tab thoát ra nền sau dialog | Modal thêm focus trap (Tab/Shift+Tab vòng trong dialog) + focus container khi mở, ưu tiên `[data-autofocus]` (ConfirmDialog dùng cho nút danger; CommandBar input vẫn dùng autoFocus attr — shell không giật focus) |
+| T6 | App.tsx Escape guard | Khi modal mở mà focus nằm trên button/container của dialog (không phải INPUT), phím Delete + tool-shortcut vẫn chạy dưới modal | Guard `modalOpen` chặn Delete/tool-shortcut/'?' khi dialog mở (Escape + Ctrl+K vẫn hoạt động) |
+
+## Changes chi tiết
+
+1. **ConfirmDialog** (`src/components/ConfirmDialog.tsx`, mới) — component thuần (props: open/title/message/labels/callbacks), danger-styled confirm (`bg-red-600`), `data-autofocus`. TopBar wire qua store flag mới `showNewProjectConfirm` (thay `window.confirm`); App's Escape guard thêm flag này.
+2. **Modal shell** — thêm `boxRef` + focus trap: Tab/Shift+Tab wrap trong dialog; focus container (`tabIndex={-1}`) khi mở trừ khi `[data-autofocus]` hoặc input đã tự focus. Lợi cho mọi dialog hiện có.
+3. **toolMeta.ts** (mới) — `Tool` interface, `CORE_TOOLS`/`AI_TOOLS`, `TOOL_META`, `TOOL_SHORTCUTS`. Toolbar.tsx giờ chỉ export component (fast-refresh sạch).
+4. **Mount-fresh pattern** — CommandBar/CanvasSizeDialog render form con chỉ khi `open`; bỏ 2 effect sync (xoá 2 warnings `set-state-in-effect`, không còn cascading render).
+5. **Tests** — `src/components/dialogs.test.tsx` (jsdom, `@testing-library/react`, không cần mock canvas): ConfirmDialog (render khi mở/đóng, danger style + autofocus, confirm/cancel callbacks, Escape, backdrop click) + Modal shell (aria-modal, autofocus data-attr, container focus, Tab wrap trap, Escape/backdrop close). **46 → 57 tests.**
+
+## Verification (Round 3)
+
+- `npm run build` — green (main chunk 88.12 + vendor-react 218.84 kB; CanvasStage lazy 334.72 kB, tương đương Round 2).
+- `npm test` — **57/57 green** (46 cũ + 11 dialog mới).
+- `npx oxlint` — **0 warnings** (trước đây 5: 2× Toolbar only-export-components, 2× set-state-in-effect, 1× TopBar refs false positive).
+- `tsc -b` — clean.
+
+## Không sửa (đã cân nhắc, ghi nhận)
+
+- Undo/redo affordance đã có đủ từ Round 2 (TopBar buttons disabled-state + Edit menu + History tab) — không thêm trùng lặp.
+- `aiAction` trong TopBar vẫn đọc `fileRef.current` trong closure nhưng qua `.map()` — rule chỉ flag object literal pass trực tiếp vào function; không cần đổi.
+- Focus trap đơn giản (Tab cycling trong dialog) — chưa có arrow-key roving/`inert` nền; đủ cho quy mô hiện tại.
+
+## Review Log Round 3
+
+- ConfirmDialog là component thuần props → test không phụ thuộc store; TopBar mới chạm store flag `showNewProjectConfirm` (reset sẵn qua `newProject`/onCancel, không leak giữa các lần mở).
+- Modal focus trap không phá CommandBar: shell chỉ focus container nếu `document.activeElement` chưa nằm trong dialog (autoFocus input của CommandBar chạy trước effect).
+- `gs:import` event listener có sẵn từ Round 2 (CanvasStage empty-canvas button dùng) — menu Import giờ dùng chung đường, không thêm API mới.
