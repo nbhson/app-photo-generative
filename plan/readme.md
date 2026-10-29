@@ -81,6 +81,60 @@
 - Session restore: khôi phục im lặng nếu có autosave; "New Project" vẫn xóa sạch.
 - Export dialog dùng `compositeLayers` có sẵn (đã clamp 8192) — scale=2 clamp tự nhiên qua EXPORT_MAX_DIM.
 
+---
+
+# Round 2 — session 2 (2026-10-29): hoàn thiện WIP bị gián đoạn + tests + audit bổ sung
+
+> Bối cảnh: session trước bị ngắt giữa chừng — để lại WIP chưa commit (ExportDialog + Modal shell +
+> ShortcutsModal + Toast + aria). Kiểm tra lại thấy: WIP **không build được** (bug `FORMATS` vs
+> `FORMAT_INFO`), và status "vitest + unit tests" ở trên **chưa đúng** — vitest có trong devDeps
+> nhưng không có test file nào và không có script `test`.
+
+## Kết quả audit bổ sung (session 2)
+
+| # | Severity | Vị trí | Vấn đề | Fix |
+|---|----------|--------|--------|-----|
+| S1 | CRITICAL | ExportDialog.tsx:74 | WIP tham chiếu `FORMATS` (undefined) trong khi map tên là `FORMAT_INFO` → `tsc -b` fail, app không build được | Đổi đúng tên; xóa var `projectName` unused |
+| S2 | MAJOR | (repo) | Không có test nào dù plan ghi "[x] vitest + unit tests"; không có script `test` | Thêm vitest config (node env) + 46 tests: store (history/reorder/snapshot isolation), persistence (sanitize/clamp/blend whitelist), providers (error paths) |
+| S3 | MAJOR | RightPanel AITab | Vẫn `useEditor()` full-store subscribe (R7 chỉ sửa StatusBar) — re-render cả tab AI mỗi wheel tick | `useShallow` selector hẹp |
+| S4 | MINOR | ExportDialog | Tự viết lại backdrop + Escape handler — trùng lặp với Modal shell vừa tạo | Refactor dùng `Modal` chung (+ `aria-labelledby`) |
+| S5 | MINOR | App.tsx Escape | Esc khi modal mở vừa đóng modal vừa clear selection (2 listener cùng trên window, `stopPropagation` không chặn được) | Guard: modal đang mở thì bỏ qua clear selection |
+| S6 | MINOR | TopBar saveFile | `URL.revokeObjectURL(a.href)` gọi đồng bộ ngay sau `click()` — có thể hủy download (Firefox) | Revoke sau 10s |
+| S7 | MINOR | TopBar New Project | Xóa project đang dirty không hỏi — mất work | `window.confirm` khi dirty + có layers |
+| S8 | MINOR | vite.config | `advancedChunks` deprecated (rolldown) → warning mỗi build | Đổi sang `codeSplitting` |
+| S9 | MINOR | (feature) | Không đổi được kích thước canvas (trừ AI Expand) | **Canvas Size dialog** — File → Canvas Size…, presets, clamp 1–8192, giữ vị trí layer, fit lại + history entry |
+
+## Features (tổng Round 2, gồm phần hoàn thiện session này)
+
+1. **Export presets dialog** (Ctrl+E) — format × scale × quality + preview kích thước *(hoàn thiện WIP)*
+2. **Canvas Size dialog** — resize document + presets *(mới, session 2)*
+3. **Keyboard shortcuts modal** (`?` / Help) *(hoàn thiện WIP)*
+4. **Toast errors + layer reorder + session restore** *(toast/reorder hoàn thiện WIP; restore từ round trước)*
+
+## Bundle (đo bằng `npm run build`)
+
+| Trạng thái | JS chính (eager) | Konva chunk (lazy) |
+|---|---|---|
+| Trước Round 2 (1 chunk duy nhất) | **623 kB** (gzip 190 kB) | — |
+| Đầu session này (đã có lazy CanvasStage) | 73.03 + 218.84 vendor-react ≈ **292 kB** (gzip ~90 kB) | 334.72 kB (gzip 102.7 kB) |
+| Cuối session 2 (thêm 2 dialog) | 85.97 + 218.84 ≈ **305 kB** (gzip 93 kB) | 334.72 kB (gzip 102.7 kB) |
+
+→ Main thread chỉ tải ~305 kB JS thay vì 623 kB một chunk; konva/react-konva (334.7 kB) chỉ tải khi canvas mount.
+
+## Trạng thái session 2
+
+- [x] Review WIP, sửa bug build (S1), hoàn thiện + commit
+- [x] 46 unit tests green (`npm test`), tsc + build + lint green
+- [x] Canvas Size dialog (S8, S7, S6 cùng commit)
+- [x] AITab narrow selector (S3) — phần còn thiếu của R7
+- [x] Self-review diff
+
+## Không sửa (đã cân nhắc, ghi nhận)
+
+- oxlint warnings còn lại (Toolbar only-export-components, TopBar refs false-positive, Overlays set-state-in-effect false-positive trên Modal keydown) — pre-existing, không phải lỗi runtime.
+- Confirm dialog dùng `window.confirm` — đủ cho scope hiện tại, custom dialog chỉ là polish.
+- AI menu khi canvas rỗng mở file import thay vì báo lỗi (đã có từ round trước) — giữ nguyên.
+
 ## Review Log
 
 ### Vòng 1
