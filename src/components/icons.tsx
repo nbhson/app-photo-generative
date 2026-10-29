@@ -86,6 +86,7 @@ const PATHS = {
     <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3" /><line x1="12" x2="12.01" y1="17" y2="17" />
   </>),
   chevronDown: (<polyline points="6 9 12 15 18 9" />),
+  chevronUp: (<polyline points="6 15 12 9 18 15" />),
   arrowRight: (<><line x1="5" x2="19" y1="12" y2="12" /><polyline points="12 5 19 12 12 19" /></>),
   alert: (<>
     <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />

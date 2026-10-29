@@ -2,7 +2,8 @@ import { Suspense, lazy, useEffect } from 'react';
 import TopBar from './components/TopBar';
 import Toolbar, { TOOL_SHORTCUTS, TOOL_META } from './components/Toolbar';
 import RightPanel from './components/RightPanel';
-import { CommandBar, SettingsModal, StatusBar, WelcomeModal } from './components/Overlays';
+import { CommandBar, SettingsModal, ShortcutsModal, StatusBar, Toast, WelcomeModal } from './components/Overlays';
+import ExportDialog from './components/ExportDialog';
 import { useEditor } from './state/store';
 import { saveProjectLocal, buildProjectFile, loadProjectLocal, sanitizeProject } from './services/persistence';
 import { importImageFile } from './services/imageImport';
@@ -28,7 +29,14 @@ export default function App() {
         return;
       }
       if ((mod && e.key.toLowerCase() === 'y') || (mod && e.shiftKey && e.key.toLowerCase() === 'z')) { e.preventDefault(); useEditor.getState().redo(); return; }
-      if (e.key === 'Escape') { useEditor.getState().setSelection(null); return; }
+      if (mod && e.key.toLowerCase() === 'e') { e.preventDefault(); useEditor.setState({ showExport: true }); return; }
+      if (e.key === 'Escape') {
+        // Modal đang mở → Modal shell tự đóng bằng Escape; không thêm clear selection
+        const s = useEditor.getState();
+        if (s.showCommandBar || s.showSettings || s.showExport || s.showShortcuts || s.showWelcome) return;
+        useEditor.getState().setSelection(null);
+        return;
+      }
       if (e.key === '?' || (e.shiftKey && e.key === '/')) { useEditor.setState({ showShortcuts: true }); return; }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         const t = e.target as HTMLElement;
@@ -109,7 +117,10 @@ export default function App() {
       <StatusBar />
       <CommandBar />
       <SettingsModal />
+      <ShortcutsModal />
+      <ExportDialog />
       <WelcomeModal />
+      <Toast />
     </div>
   );
 }

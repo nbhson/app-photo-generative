@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useEditor } from '../state/store';
 import { smartSelectSubject } from '../ai/runGeneration';
 import { Icon, type IconName } from './icons';
@@ -36,6 +36,9 @@ export default function Toolbar() {
   const tool = useEditor((s) => s.tool);
   const analyzing = useEditor((s) => s.analyzing);
   const [notice, setNotice] = useState('');
+  // timeout ref — cleanup khi unmount (trước đây setState sau unmount)
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (noticeTimer.current) clearTimeout(noticeTimer.current); }, []);
 
   const pick = async (t: Tool) => {
     if (t.id === 'ai-select') {
@@ -44,7 +47,8 @@ export default function Toolbar() {
       const ok = await smartSelectSubject();
       if (!ok) {
         setNotice('Import an image first');
-        setTimeout(() => setNotice(''), 2500);
+        if (noticeTimer.current) clearTimeout(noticeTimer.current);
+        noticeTimer.current = setTimeout(() => setNotice(''), 2500);
       }
       return;
     }
@@ -61,6 +65,8 @@ export default function Toolbar() {
       <button
         key={t.id}
         title={`${t.label} (${t.shortcut}) — ${t.hint}`}
+        aria-label={`${t.label} — ${t.hint}`}
+        aria-pressed={active}
         onClick={() => pick(t)}
         className={`w-9 h-9 grid place-items-center rounded-lg transition-all
           ${active

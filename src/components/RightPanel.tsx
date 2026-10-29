@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useEditor, enhancePrompt } from '../state/store';
 import { runAIAction, runGeneration, acceptResult, mockAnalyze } from '../ai/runGeneration';
 import { Icon, type IconName } from './icons';
@@ -57,7 +58,9 @@ function LayersTab() {
           className="flex-1 inline-flex items-center justify-center gap-1.5 text-[12px] py-1.5 rounded-md bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
           <Icon name="plus" size={13} /> New layer</button>
       </div>
-      {rev.map((l) => (
+      {rev.map((l, ri) => {
+        const arrIdx = layers.length - 1 - ri; // panel hiển thị đảo ngược mảng
+        return (
         <div key={l.id} onClick={() => useEditor.setState({ activeLayerId: l.id })}
           className={`group flex items-center gap-2 p-1.5 rounded-lg cursor-pointer border ${active === l.id ? 'bg-violet-600/15 border-violet-500/50' : 'border-transparent hover:bg-white/5'}`}>
           <div className="w-10 h-10 rounded bg-check shrink-0 overflow-hidden border border-white/10 grid place-items-center text-[10px] text-white/40">
@@ -79,16 +82,29 @@ function LayersTab() {
             )}
             <div className="text-[10px] text-white/35">{l.type} · {Math.round(l.opacity * 100)}%</div>
           </div>
-          <button title={l.visible ? 'Hide layer' : 'Show layer'} onClick={(e) => { e.stopPropagation(); st.updateLayer(l.id, { visible: !l.visible }); }}
+          <div className="flex flex-col shrink-0">
+            <button title="Move layer up" aria-label={`Move ${l.name} up`} disabled={arrIdx === layers.length - 1}
+              onClick={(e) => { e.stopPropagation(); st.reorderLayers(arrIdx, arrIdx + 1); st.pushHistory('Reorder layer'); }}
+              className="p-px rounded text-white/45 hover:text-white hover:bg-white/10 disabled:opacity-20 disabled:hover:text-white/20 transition-colors">
+              <Icon name="chevronUp" size={13} />
+            </button>
+            <button title="Move layer down" aria-label={`Move ${l.name} down`} onClick={(e) => { e.stopPropagation(); st.reorderLayers(arrIdx, arrIdx - 1); st.pushHistory('Reorder layer'); }}
+              disabled={arrIdx === 0}
+              className="p-px rounded text-white/45 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-20 disabled:hover:bg-transparent">
+              <Icon name="chevronDown" size={13} />
+            </button>
+          </div>
+          <button title={l.visible ? 'Hide layer' : 'Show layer'} aria-label={l.visible ? `Hide layer ${l.name}` : `Show layer ${l.name}`} aria-pressed={!l.visible} onClick={(e) => { e.stopPropagation(); st.updateLayer(l.id, { visible: !l.visible }); }}
             className="p-1 rounded text-white/60 hover:text-white hover:bg-white/10 transition-colors">
             <Icon name={l.visible ? 'eye' : 'eyeOff'} size={14} />
           </button>
-          <button title={l.locked ? 'Unlock layer' : 'Lock layer'} onClick={(e) => { e.stopPropagation(); st.updateLayer(l.id, { locked: !l.locked }); }}
+          <button title={l.locked ? 'Unlock layer' : 'Lock layer'} aria-label={l.locked ? `Unlock layer ${l.name}` : `Lock layer ${l.name}`} aria-pressed={l.locked} onClick={(e) => { e.stopPropagation(); st.updateLayer(l.id, { locked: !l.locked }); }}
             className="p-1 rounded text-white/60 hover:text-white hover:bg-white/10 transition-colors">
             <Icon name={l.locked ? 'lock' : 'unlock'} size={14} />
           </button>
         </div>
-      ))}
+        );
+      })}
       {active && <LayerProps id={active} />}
       {layers.length === 0 && <p className="text-[12px] text-white/35 text-center mt-6">No layers yet.<br />Import an image to begin.</p>}
     </div>
@@ -125,7 +141,13 @@ function LayerProps({ id }: { id: string }) {
 }
 
 function AITab() {
-  const s = useEditor();
+  // selector hẹp (shallow) — full-store subscribe trước đây re-render toàn tab mỗi wheel tick
+  const s = useEditor(useShallow((st) => ({
+    promptText: st.promptText, jobs: st.jobs, analyzing: st.analyzing,
+    detected: st.detected, activeProviderId: st.activeProviderId,
+    customProviders: st.customProviders, variations: st.variations,
+    preserveStructure: st.preserveStructure, preserveLighting: st.preserveLighting,
+  })));
   const [busy, setBusy] = useState<AIOperationType | null>(null);
   const [err, setErr] = useState('');
   const go = async (t: AIOperationType) => {

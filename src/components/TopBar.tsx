@@ -43,8 +43,12 @@ export default function TopBar({ onImport }: { onImport: (f: File) => void }) {
 
   const doExport = async (format: 'png' | 'jpeg' | 'webp') => {
     const st = useEditor.getState();
-    const url = await compositeLayers(st.layers, st.canvasWidth, st.canvasHeight, format);
-    downloadDataUrl(url, `${st.projectName}.${format}`);
+    try {
+      const url = await compositeLayers(st.layers, st.canvasWidth, st.canvasHeight, format);
+      downloadDataUrl(url, `${st.projectName || 'Untitled Project'}.${format}`);
+    } catch (e) {
+      useEditor.setState({ toast: e instanceof Error ? e.message : 'Export failed' });
+    }
   };
   const doSave = async () => {
     const st = useEditor.getState();
@@ -85,6 +89,7 @@ export default function TopBar({ onImport }: { onImport: (f: File) => void }) {
       { label: 'Export PNG', action: () => void doExport('png') },
       { label: 'Export JPEG', action: () => void doExport('jpeg') },
       { label: 'Export WebP', action: () => void doExport('webp') },
+      { label: 'Export… (format · scale · quality)', shortcut: 'Ctrl+E', action: () => useEditor.setState({ showExport: true }) },
     ],
     Edit: [
       { label: 'Undo', shortcut: 'Ctrl+Z', disabled: !canUndo, action: () => useEditor.getState().undo() },
@@ -133,16 +138,17 @@ export default function TopBar({ onImport }: { onImport: (f: File) => void }) {
             <button
               onClick={() => setOpen(open === name ? null : name)}
               onMouseEnter={() => { if (open) setOpen(name); }}
+              aria-haspopup="menu" aria-expanded={open === name}
               className={`px-2 py-1 rounded ${open === name ? 'bg-white/10 text-white' : 'hover:bg-white/10 hover:text-white'}`}>
               {name}
             </button>
             {open === name && (
               <div className="absolute left-0 top-full pt-1 z-50">
-                <div className="bg-[#171b24] border border-white/10 rounded-lg p-1 w-64 shadow-2xl">
+                <div className="bg-[#171b24] border border-white/10 rounded-lg p-1 w-64 shadow-2xl" role="menu" aria-label={`${name} menu`}>
                   {items.map((it, i) => it.divider ? (
                     <div key={i} className="h-px bg-white/10 my-1" />
                   ) : (
-                    <button key={i} disabled={it.disabled}
+                    <button key={i} disabled={it.disabled} role="menuitem"
                       onClick={() => { setOpen(null); it.action?.(); }}
                       className="flex items-center gap-2 w-full text-left px-2.5 py-1.5 rounded hover:bg-violet-600/25 text-[12.5px] text-white/85 disabled:opacity-35 disabled:hover:bg-transparent">
                       <span className="flex-1">{it.label}</span>
@@ -186,7 +192,7 @@ export default function TopBar({ onImport }: { onImport: (f: File) => void }) {
 
 function ToolBtn({ children, title, onClick, disabled }: { children: React.ReactNode; title: string; onClick?: () => void; disabled?: boolean }) {
   return (
-    <button title={title} onClick={onClick} disabled={disabled}
+    <button title={title} aria-label={title} onClick={onClick} disabled={disabled}
       className="px-2 py-1 rounded hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent text-white/80">
       {children}
     </button>

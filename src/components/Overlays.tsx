@@ -4,6 +4,28 @@ import { useEditor, parseIntent } from '../state/store';
 import { runGeneration } from '../ai/runGeneration';
 import { Icon, type IconName } from './icons';
 
+/** Shared modal shell: backdrop click + Escape to close, dialog semantics. */
+export function Modal({ onClose, width, labelledBy, children, align = 'center' }: {
+  onClose: () => void; width: string; labelledBy?: string;
+  children: React.ReactNode; align?: 'center' | 'top';
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div role="dialog" aria-modal="true" aria-labelledby={labelledBy}
+      className={`fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px] ${align === 'top' ? 'grid place-items-start pt-28' : 'grid place-items-center p-4'}`}
+      onClick={onClose}>
+      <div className={`${width} bg-[#141823] border border-white/15 rounded-2xl shadow-2xl overflow-hidden`}
+        onClick={(e) => e.stopPropagation()}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 const SUGGESTIONS = [
   'Remove the person in the background',
   'Change the background to a luxury office at sunset',
@@ -30,10 +52,7 @@ export function CommandBar() {
     finally { setBusy(false); }
   };
   return (
-    <div className="fixed inset-0 z-50 grid place-items-start pt-28 bg-black/60 backdrop-blur-[2px]"
-      onClick={() => useEditor.setState({ showCommandBar: false })}>
-      <div className="w-[min(620px,92vw)] bg-[#141823] border border-white/15 rounded-2xl shadow-2xl overflow-hidden"
-        onClick={(e) => e.stopPropagation()}>
+    <Modal width="w-[min(620px,92vw)]" align="top" onClose={() => useEditor.setState({ showCommandBar: false })}>
         <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10">
           <Icon name="sparkles" size={16} className="text-violet-300 shrink-0" />
           <input autoFocus value={text} onChange={(e) => setText(e.target.value)}
@@ -54,8 +73,7 @@ export function CommandBar() {
         </div>
         {busy && <div className="flex items-center gap-2 px-4 py-2 text-[13px] text-violet-300"><span className="w-2 h-2 rounded-full bg-violet-400 gen-pulse" /> Working — watch the AI panel for progress…</div>}
         {err && <div className="px-4 py-2 text-[13px] text-red-400">{err}</div>}
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -82,8 +100,8 @@ export function SettingsModal() {
     finally { setTesting(false); }
   };
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60" onClick={() => useEditor.setState({ showSettings: false })}>
-      <div className="w-[min(520px,92vw)] bg-[#141823] border border-white/15 rounded-2xl p-5" onClick={(e) => e.stopPropagation()}>
+    <Modal width="w-[min(520px,92vw)]" onClose={() => useEditor.setState({ showSettings: false })}>
+      <div className="p-5">
         <h2 className="flex items-center gap-2 font-semibold mb-1"><Icon name="sliders" size={16} className="text-white/60" /> AI Provider settings</h2>
         <div className="text-[12px] text-white/55 leading-relaxed mb-4 rounded-lg bg-white/[.03] border border-white/10 p-2.5">
           <b className="text-white/85">How this works</b>
@@ -130,10 +148,10 @@ export function SettingsModal() {
             {customs.map((c) => (
               <div key={c.id} className="flex items-center gap-2 px-2 py-1.5 rounded bg-white/[.04] border border-white/10">
                 <span className="flex-1 truncate">{c.name} · <span className="text-white/40">{c.model}</span></span>
-                <button title="Use this provider" className="text-white/50 hover:text-white transition-colors" onClick={() => useEditor.setState({ activeProviderId: c.id, showSettings: false })}>
+                <button title="Use this provider" aria-label={`Use provider ${c.name}`} className="text-white/50 hover:text-white transition-colors" onClick={() => useEditor.setState({ activeProviderId: c.id, showSettings: false })}>
                   <Icon name="check" size={14} />
                 </button>
-                <button title="Remove provider" className="text-red-400/70 hover:text-red-300 transition-colors" onClick={() => useEditor.setState({ customProviders: customs.filter((x) => x.id !== c.id) })}>
+                <button title="Remove provider" aria-label={`Remove provider ${c.name}`} className="text-red-400/70 hover:text-red-300 transition-colors" onClick={() => useEditor.setState({ customProviders: customs.filter((x) => x.id !== c.id) })}>
                   <Icon name="x" size={14} />
                 </button>
               </div>
@@ -141,31 +159,39 @@ export function SettingsModal() {
           </div>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }
 
 export function StatusBar() {
-  const s = useEditor();
+  // selector hẹp — full-store subscribe trước đây re-render footer mỗi wheel tick
+  const canvasWidth = useEditor((s) => s.canvasWidth);
+  const canvasHeight = useEditor((s) => s.canvasHeight);
+  const layerCount = useEditor((s) => s.layers.length);
+  const visibleCount = useEditor((s) => s.layers.reduce((n, l) => n + (l.visible ? 1 : 0), 0));
+  const selection = useEditor((s) => s.selection);
+  const zoom = useEditor((s) => s.zoom);
+  const fitTick = useEditor((s) => s.fitTick);
+  const activeProviderId = useEditor((s) => s.activeProviderId);
   const setZoom = (z: number) => {
     const nz = Math.max(0.05, Math.min(8, z));
     useEditor.setState({ zoom: nz });
   };
   return (
     <footer className="h-7 shrink-0 flex items-center gap-3 px-3 bg-[#10131a] border-t border-white/10 text-[11px] text-white/50">
-      <span>{Math.round(s.canvasWidth)} × {Math.round(s.canvasHeight)} px</span>
+      <span className="tabular-nums">{Math.round(canvasWidth)} × {Math.round(canvasHeight)} px</span>
       <span className="text-white/20">|</span>
-      <span>{s.layers.filter((l) => l.visible).length}/{s.layers.length} layers</span>
-      {s.selection && <span className="text-violet-300">▭ {Math.round(s.selection.width)}×{Math.round(s.selection.height)} @ {Math.round(s.selection.x)},{Math.round(s.selection.y)}</span>}
+      <span>{visibleCount}/{layerCount} layers</span>
+      {selection && <span className="text-violet-300">▭ {Math.round(selection.width)}×{Math.round(selection.height)} @ {Math.round(selection.x)},{Math.round(selection.y)}</span>}
       <div className="flex-1" />
-      <button onClick={() => setZoom(s.zoom - 0.1)} className="px-1.5 hover:text-white">−</button>
-      <button onClick={() => useEditor.setState({ fitTick: s.fitTick + 1 })} className="hover:text-white tabular-nums">{Math.round(s.zoom * 100)}%</button>
-      <button onClick={() => setZoom(s.zoom + 0.1)} className="px-1.5 hover:text-white">+</button>
-      <button onClick={() => useEditor.setState({ fitTick: s.fitTick + 1 })} className="hover:text-white">Fit</button>
+      <button aria-label="Zoom out" onClick={() => setZoom(zoom - 0.1)} className="px-1.5 hover:text-white">−</button>
+      <button aria-label={`Zoom ${Math.round(zoom * 100)} percent — click to fit`} onClick={() => useEditor.setState({ fitTick: fitTick + 1 })} className="hover:text-white tabular-nums">{Math.round(zoom * 100)}%</button>
+      <button aria-label="Zoom in" onClick={() => setZoom(zoom + 0.1)} className="px-1.5 hover:text-white">+</button>
+      <button onClick={() => useEditor.setState({ fitTick: fitTick + 1 })} className="hover:text-white">Fit</button>
       <span className="text-white/20">|</span>
       <span className="hidden md:inline-flex items-center gap-1.5">
-        <span className={`w-1.5 h-1.5 rounded-full ${s.activeProviderId === 'mock' ? 'bg-violet-400' : 'bg-emerald-400'}`} />
-        {s.activeProviderId === 'mock' ? 'Mock AI' : 'Custom AI'}
+        <span className={`w-1.5 h-1.5 rounded-full ${activeProviderId === 'mock' ? 'bg-violet-400' : 'bg-emerald-400'}`} />
+        {activeProviderId === 'mock' ? 'Mock AI' : 'Custom AI'}
       </span>
     </footer>
   );
@@ -189,8 +215,8 @@ export function WelcomeModal() {
     { icon: 'layers', title: '4 · Apply & Continue', text: 'Apply a result as its own layer. Everything is non-destructive — undo anytime.' },
   ];
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/65 p-4" onClick={close}>
-      <div className="w-[min(560px,94vw)] bg-[#141823] border border-white/15 rounded-2xl p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <Modal width="w-[min(560px,94vw)]" onClose={close}>
+      <div className="p-6">
         <div className="flex items-center gap-2 mb-1">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-sky-500 grid place-items-center text-white">
             <Icon name="sparkles" size={16} />
@@ -217,6 +243,92 @@ export function WelcomeModal() {
             className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-sm">Connect AI provider</button>
         </div>
       </div>
+    </Modal>
+  );
+}
+
+const SHORTCUT_SECTIONS: { title: string; items: [string, string][] }[] = [
+  {
+    title: 'General',
+    items: [
+      ['⌘ / Ctrl + K', 'Command bar'],
+      ['⌘ / Ctrl + Z', 'Undo'],
+      ['⌘ / Ctrl + Shift + Z', 'Redo'],
+      ['⌘ / Ctrl + S', 'Save to browser'],
+      ['⌘ / Ctrl + E', 'Export…'],
+      ['?', 'Keyboard shortcuts'],
+      ['Esc', 'Close dialog / clear selection'],
+      ['Delete', 'Delete active layer'],
+    ],
+  },
+  {
+    title: 'Tools',
+    items: [
+      ['V', 'Move'],
+      ['M', 'Select area'],
+      ['H', 'Pan'],
+      ['S', 'AI Select'],
+      ['G', 'Generative Fill'],
+      ['R', 'Remove object'],
+      ['W', 'Replace object'],
+      ['D', 'Background'],
+      ['X', 'Generative Expand'],
+      ['Ctrl / ⌘ + scroll', 'Zoom · plain scroll to pan'],
+    ],
+  },
+  {
+    title: 'Layers',
+    items: [
+      ['[', 'Focus Layers panel'],
+      ['Enter / double-click', 'Rename layer'],
+      ['Ctrl + scroll on canvas', 'Zoom viewport'],
+    ],
+  },
+];
+
+export function ShortcutsModal() {
+  const open = useEditor((s) => s.showShortcuts);
+  if (!open) return null;
+  return (
+    <Modal width="w-[min(640px,94vw)]" onClose={() => useEditor.setState({ showShortcuts: false })}>
+      <div className="p-5">
+        <h2 className="flex items-center gap-2 font-semibold mb-4"><Icon name="command" size={16} className="text-white/60" /> Keyboard shortcuts</h2>
+        <div className="grid sm:grid-cols-3 gap-4">
+          {SHORTCUT_SECTIONS.map((sec) => (
+            <div key={sec.title}>
+              <div className="text-[11px] uppercase tracking-wide text-white/35 mb-1.5">{sec.title}</div>
+              <dl className="space-y-1">
+                {sec.items.map(([keys, desc]) => (
+                  <div key={keys} className="flex items-center justify-between gap-2 text-[12px]">
+                    <dt className="text-white/60 truncate">{desc}</dt>
+                    <dd><kbd className="text-[10.5px] text-white/70 bg-white/5 border border-white/10 rounded px-1.5 py-0.5 whitespace-nowrap">{keys}</kbd></dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          ))}
+        </div>
+        <button onClick={() => useEditor.setState({ showShortcuts: false })}
+          className="mt-5 w-full py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-sm">Close</button>
+      </div>
+    </Modal>
+  );
+}
+
+/** Transient toast (import/export/save errors). Auto-dismisses; timer cleaned up. */
+export function Toast() {
+  const toast = useEditor((s) => s.toast);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => useEditor.setState({ toast: undefined }), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
+  if (!toast) return null;
+  return (
+    <div role="status" aria-live="polite"
+      className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[60] max-w-[80vw] px-3.5 py-2 rounded-lg bg-[#141823] border border-white/15 text-[13px] text-white/85 shadow-2xl flex items-center gap-2">
+      <Icon name="alert" size={14} className="text-amber-300 shrink-0" />
+      <span className="truncate">{toast}</span>
     </div>
   );
 }

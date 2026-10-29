@@ -11,7 +11,7 @@ export default defineConfig({
         // Split the react runtime (changes independently of app code) into its
         // own long-term-cacheable chunk. Konva already splits via the dynamic
         // import() of CanvasStage in App.tsx.
-        advancedChunks: {
+        codeSplitting: {
           groups: [
             { name: 'vendor-react', test: /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/ },
           ],
