@@ -4,6 +4,7 @@ import Toolbar, { TOOL_SHORTCUTS, TOOL_META } from './components/Toolbar';
 import RightPanel from './components/RightPanel';
 import { CommandBar, SettingsModal, ShortcutsModal, StatusBar, Toast, WelcomeModal } from './components/Overlays';
 import ExportDialog from './components/ExportDialog';
+import CanvasSizeDialog from './components/CanvasSizeDialog';
 import { useEditor } from './state/store';
 import { saveProjectLocal, buildProjectFile, loadProjectLocal, sanitizeProject } from './services/persistence';
 import { importImageFile } from './services/imageImport';
@@ -33,7 +34,7 @@ export default function App() {
       if (e.key === 'Escape') {
         // Modal đang mở → Modal shell tự đóng bằng Escape; không thêm clear selection
         const s = useEditor.getState();
-        if (s.showCommandBar || s.showSettings || s.showExport || s.showShortcuts || s.showWelcome) return;
+        if (s.showCommandBar || s.showSettings || s.showExport || s.showShortcuts || s.showWelcome || s.showCanvasSize) return;
         useEditor.getState().setSelection(null);
         return;
       }
@@ -119,6 +120,7 @@ export default function App() {
       <SettingsModal />
       <ShortcutsModal />
       <ExportDialog />
+      <CanvasSizeDialog />
       <WelcomeModal />
       <Toast />
     </div>

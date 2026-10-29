@@ -28,6 +28,7 @@ interface EditorState {
   showWelcome: boolean;
   showShortcuts: boolean;
   showExport: boolean;
+  showCanvasSize: boolean;
   /** Transient toast message (not persisted) — auto-dismisses. */
   toast?: string;
   promptText: string;
@@ -79,7 +80,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   zoom: 0.6, panX: 0, panY: 0, fitTick: 0,
   dirty: false, saveStatus: 'saved',
   rightTab: 'layers',
-  showCommandBar: false, showSettings: false, showWelcome: false, showShortcuts: false, showExport: false,
+  showCommandBar: false, showSettings: false, showWelcome: false, showShortcuts: false, showExport: false, showCanvasSize: false,
   promptText: '',
   jobs: {},
   operations: [], results: [], compareMode: false,

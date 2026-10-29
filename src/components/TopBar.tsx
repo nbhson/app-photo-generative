@@ -65,7 +65,14 @@ export default function TopBar({ onImport }: { onImport: (f: File) => void }) {
     const blob = new Blob([JSON.stringify(buildProjectFile(st), null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = `${st.projectName || 'Untitled Project'}.gstudio`; a.click();
-    URL.revokeObjectURL(a.href);
+    // revoke sau một tick — revoke đồng bộ ngay sau click() có thể hủy download (Firefox)
+    setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+  };
+  const newProject = () => {
+    const st = useEditor.getState();
+    // đang có work chưa save → xác nhận trước khi mất
+    if (st.dirty && st.layers.length > 0 && !window.confirm('Start a new project? Unsaved changes will be lost.')) return;
+    st.newProject();
   };
   const aiAction = (t: AIOperationType) => {
     // empty canvas → offer import first instead of failing silently
@@ -80,8 +87,9 @@ export default function TopBar({ onImport }: { onImport: (f: File) => void }) {
 
   const menus: Record<string, MenuItem[]> = {
     File: [
-      { label: 'New Project', action: () => useEditor.getState().newProject() },
+      { label: 'New Project', action: newProject },
       { label: 'Import Image…', action: () => fileRef.current?.click() },
+      { label: 'Canvas Size…', action: () => useEditor.setState({ showCanvasSize: true }) },
       { divider: true },
       { label: 'Save to Browser', shortcut: 'Ctrl+S', action: () => void doSave() },
       { label: 'Download Project (.gstudio)', action: saveFile },
