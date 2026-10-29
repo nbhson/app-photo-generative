@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect } from 'react';
 import TopBar from './components/TopBar';
-import Toolbar, { TOOL_SHORTCUTS, TOOL_META } from './components/Toolbar';
+import Toolbar from './components/Toolbar';
+import { TOOL_SHORTCUTS, TOOL_META } from './components/toolMeta';
 import RightPanel from './components/RightPanel';
 import { CommandBar, SettingsModal, ShortcutsModal, StatusBar, Toast, WelcomeModal } from './components/Overlays';
 import ExportDialog from './components/ExportDialog';
