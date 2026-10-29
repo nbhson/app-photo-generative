@@ -1,10 +1,17 @@
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+// vitest/config re-export defineConfig của vite + types cho block `test`
+import { defineConfig } from 'vitest/config'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // vitest — logic thuần (store/persistence/providers) chạy trong node env,
+  // DOM phụ được stub trong từng test file (xem *.test.ts).
+  test: {
+    environment: 'node',
+    include: ['src/**/*.test.{ts,tsx}'],
+  },
   build: {
     rolldownOptions: {
       output: {
