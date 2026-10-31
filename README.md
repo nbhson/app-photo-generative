@@ -1,5 +1,7 @@
 # Generative Studio
 
+[![CI](https://github.com/nbhson/app-photo-generative/actions/workflows/ci.yml/badge.svg)](https://github.com/nbhson/app-photo-generative/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A desktop-first, AI-powered image editor focused on **generative editing** — not a Photoshop clone.
 Import an image, select an area, describe the change, pick from AI variations, and keep
 editing non-destructively.
