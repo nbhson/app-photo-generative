@@ -17,7 +17,7 @@
     "react-dom": "^19.2.8",
     "react-konva": "^19.3.0",
     "use-image": "^1.1.4",
-    "uuid": "^14.0.2",
+    "uuid": "^14.0.3",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
